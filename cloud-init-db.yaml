@@ -28,7 +28,7 @@ write_files:
       NODE_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
       mkdir -p /var/snap/microk8s/current/args
       if ! grep -q -- "--node-ip=" /var/snap/microk8s/current/args/kubelet 2>/dev/null; then
-        echo "--node-ip=${NODE_IP}" >> /var/snap/microk8s/current/args/kubelet
+        echo "--node-ip=$${NODE_IP}" >> /var/snap/microk8s/current/args/kubelet
       fi
 
       echo "=== Ajustando plataforma por defecto en containerd ==="
