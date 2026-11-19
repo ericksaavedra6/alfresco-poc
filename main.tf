@@ -146,7 +146,3 @@ resource "lxd_instance" "alfresco_app" {
     })
   }
 }
-import {
-  to = lxd_project.alfresco_poc
-  id = "alfresco-poc"
-}
