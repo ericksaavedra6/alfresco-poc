@@ -1,0 +1,27 @@
+name: Deploy Multimedia Infrastructure
+
+on:
+  push:
+    branches:
+      - main # O la rama principal que uses en tu repositorio
+
+jobs:
+  terraform:
+    name: "Terraform Apply"
+    runs-on: self-hosted # Utilizará tu segundo runner en el servidor ec200a
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve

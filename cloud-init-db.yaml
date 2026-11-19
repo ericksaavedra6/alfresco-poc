@@ -1,0 +1,59 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+packages:
+  - curl
+  - apt-transport-https
+  - ca-certificates
+  - snapd
+
+write_files:
+  - path: /usr/local/bin/setup-alfresco-k8s.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      echo "=== Inicializando nodo Kubernetes para PoC de Alfresco ==="
+      [ -e /dev/kmsg ] || ln -s /dev/console /dev/kmsg
+
+      echo "=== Esperando a que snapd esté listo ==="
+      snap wait system seed
+
+      echo "=== Instalando MicroK8s ==="
+      snap install microk8s --classic
+      /snap/bin/microk8s status --wait-ready
+
+      echo "=== Configurando --node-ip con la IP de eth0 ==="
+      NODE_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+      mkdir -p /var/snap/microk8s/current/args
+      if ! grep -q -- "--node-ip=" /var/snap/microk8s/current/args/kubelet 2>/dev/null; then
+        echo "--node-ip=${NODE_IP}" >> /var/snap/microk8s/current/args/kubelet
+      fi
+
+      echo "=== Ajustando plataforma por defecto en containerd ==="
+      if [ -f /var/snap/microk8s/current/args/containerd-template.toml ]; then
+        sed -i 's/platforms = \[\]/platforms = ["linux\/amd64"]/g' /var/snap/microk8s/current/args/containerd-template.toml || true
+      fi
+
+      echo "=== Reiniciando MicroK8s para aplicar cambios ==="
+      /snap/bin/microk8s stop
+      /snap/bin/microk8s start
+      /snap/bin/microk8s status --wait-ready
+
+      echo "=== Habilitando addons básicos (dns y storage) ==="
+      /snap/bin/microk8s enable dns storage
+
+      echo "=== Configurando alias kubectl ==="
+      grep -q "alias kubectl='microk8s kubectl'" /root/.bashrc || \
+        echo "alias kubectl='microk8s kubectl'" >> /root/.bashrc
+
+      if [ -f /etc/postgress-db.yaml ]; then
+        echo "=== Aplicando manifiesto de base de datos ==="
+        /snap/bin/microk8s kubectl apply -f /etc/postgress-db.yaml || true
+      fi
+
+      echo "=== Aprovisionamiento finalizado ==="
+
+runcmd:
+  - /usr/local/bin/setup-alfresco-k8s.sh

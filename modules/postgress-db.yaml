@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: alfresco-poc
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-alfresco-secret
+  namespace: alfresco-poc
+type: Opaque
+stringData:
+  POSTGRES_DB: alfresco
+  POSTGRES_USER: alfresco
+  POSTGRES_PASSWORD: alfresco_poc_pass
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-alfresco
+  namespace: alfresco-poc
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: postgres-alfresco
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-alfresco
+  namespace: alfresco-poc
+spec:
+  serviceName: postgres-alfresco
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-alfresco
+  template:
+    metadata:
+      labels:
+        app: postgres-alfresco
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - secretRef:
+                name: postgres-alfresco-secret
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1536Mi"
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+            initialDelaySeconds: 15
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: microk8s-hostpath
+        resources:
+          requests:
+            storage: 10Gi

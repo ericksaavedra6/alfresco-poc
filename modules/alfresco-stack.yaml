@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: alfresco-poc
+---
+# 1. ActiveMQ (Broker interno para eventos y colas)
+apiVersion: v1
+kind: Service
+metadata:
+  name: activemq
+  namespace: alfresco-poc
+spec:
+  ports:
+    - port: 61616
+      targetPort: 61616
+      name: openwire
+    - port: 8161
+      targetPort: 8161
+      name: console
+  selector:
+    app: activemq
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: activemq
+  namespace: alfresco-poc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: activemq
+  template:
+    metadata:
+      labels:
+        app: activemq
+    spec:
+      containers:
+        - name: activemq
+          image: apache/activemq-classic:5.18.4
+          ports:
+            - containerPort: 61616
+            - containerPort: 8161
+          env:
+            - name: ACTIVEMQ_MIN_MEMORY
+              value: "256"
+            - name: ACTIVEMQ_MAX_MEMORY
+              value: "512"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "384Mi"
+            limits:
+              cpu: "800m"
+              memory: "768Mi"
+---
+# 2. Alfresco Content Repository 26.2 (Sin Solr ni Elasticsearch)
+apiVersion: v1
+kind: Service
+metadata:
+  name: alfresco-repo
+  namespace: alfresco-poc
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+      name: http
+  selector:
+    app: alfresco-repo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alfresco-repo
+  namespace: alfresco-poc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alfresco-repo
+  template:
+    metadata:
+      labels:
+        app: alfresco-repo
+    spec:
+      containers:
+        - name: alfresco-content-services
+          # Versión estable de la familia 26.2 (verifica el tag exacto en Docker Hub)
+          image: alfresco/alfresco-content-repository-community:26.2.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: JAVA_OPTS
+              value: "-Xms1536m -Xmx2560m -XX:+UseG1GC"
+            - name: DB_KIND
+              value: "postgresql"
+            - name: DB_USERNAME
+              value: "alfresco"
+            - name: DB_PASSWORD
+              value: "alfresco_poc_pass"
+            # IP de tu VM PostgreSQL en lxdbr0 (o usa el DNS del Service si corre en el clúster)
+            - name: DB_URL
+              value: "jdbc:postgresql://10.146.220.56:5432/alfresco"
+            - name: ACTIVEMQ_URL
+              value: "nio://activemq:61616?jms.useAsyncSend=true"
+            # Desactiva búsqueda Solr / Elasticsearch en la PoC
+            - name: GLOBAL_solr.host
+              value: "disabled"
+            - name: GLOBAL_index.subsystem.name
+              value: "noindex"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "3584Mi"
+          volumeMounts:
+            - name: alfresco-data
+              mountPath: /usr/local/tomcat/alf_data
+      volumes:
+        - name: alfresco-data
+          persistentVolumeClaim:
+            claimName: alfresco-repo-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alfresco-repo-data
+  namespace: alfresco-poc
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: microk8s-hostpath
+  resources:
+    requests:
+      storage: 15Gi
+---
+# 3. Alfresco Share 26.2
+apiVersion: v1
+kind: Service
+metadata:
+  name: alfresco-share
+  namespace: alfresco-poc
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30081
+      name: http
+  selector:
+    app: alfresco-share
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alfresco-share
+  namespace: alfresco-poc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alfresco-share
+  template:
+    metadata:
+      labels:
+        app: alfresco-share
+    spec:
+      containers:
+        - name: alfresco-share
+          image: alfresco/alfresco-share:26.2.3
+          ports:
+            - containerPort: 8080
+          env:
+            - name: JAVA_OPTS
+              value: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+            - name: REPO_HOST
+              value: "alfresco-repo"
+            - name: REPO_PORT
+              value: "8080"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "768Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1536Mi"
+---
+# 4. Alfresco REST API Explorer
+apiVersion: v1
+kind: Service
+metadata:
+  name: alfresco-api-explorer
+  namespace: alfresco-poc
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30082
+      name: http
+  selector:
+    app: alfresco-api-explorer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alfresco-api-explorer
+  namespace: alfresco-poc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alfresco-api-explorer
+  template:
+    metadata:
+      labels:
+        app: alfresco-api-explorer
+    spec:
+      containers:
+        - name: api-explorer
+          image: alfresco/rest-api-explorer:master
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

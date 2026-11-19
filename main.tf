@@ -1,0 +1,148 @@
+terraform {
+  required_version = ">= 1.3.0"
+  required_providers {
+    lxd = {
+      source  = "terraform-lxd/lxd"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "lxd" {}
+
+# 1. Proyecto LXD aislado para la PoC de Alfresco
+# features.networks = "false" permite compartir lxdbr0 del proyecto default
+resource "lxd_project" "alfresco_poc" {
+  name        = "alfresco-poc"
+  description = "Proyecto aislado para PoC de Alfresco sin Solr"
+
+  config = {
+    "features.images"          = "false"
+    "features.profiles"        = "false"
+    "features.storage.volumes" = "false"
+    "features.networks"        = "false"
+  }
+}
+
+# 2. Instancia VM para PostgreSQL (Base de datos dedicada)
+resource "lxd_instance" "alfresco_db" {
+  name     = "alfresco-poc-db"
+  project  = lxd_project.alfresco_poc.name
+  image    = "ubuntu:24.04"
+  profiles = ["default"]
+  type     = "virtual-machine"
+
+  limits = {
+    cpu    = "2"
+    memory = "2GB"
+  }
+
+  device {
+    name = "root"
+    type = "disk"
+    properties = {
+      pool = "local"
+      path = "/"
+      size = "20GB"
+    }
+  }
+
+  device {
+    name = "eth0"
+    type = "nic"
+    properties = {
+      network        = "lxdbr0"
+      "ipv4.address" = "10.146.220.56"
+    }
+  }
+
+  lifecycle {
+    create_before_destroy = false
+  }
+
+  file {
+    source_path        = "${path.module}/modules/postgress-db.yaml"
+    target_path        = "/etc/postgress-db.yaml"
+    create_directories = true
+  }
+
+  config = {
+    "migration.stateful" = "false"
+    "user.user-data"     = templatefile("${path.module}/cloud-init-db.yaml", {})
+  }
+}
+
+# 3. Instancia VM para Alfresco (Kubernetes / Repository / ActiveMQ)
+resource "lxd_instance" "alfresco_app" {
+  name     = "alfresco-poc-app"
+  project  = lxd_project.alfresco_poc.name
+  image    = "ubuntu:24.04"
+  profiles = ["default"]
+  type     = "virtual-machine"
+
+  # Asegura que la BD exista antes de levantar Alfresco
+  depends_on = [lxd_instance.alfresco_db]
+
+  limits = {
+    cpu    = "4"
+    memory = "6GB"
+  }
+
+  device {
+    name = "root"
+    type = "disk"
+    properties = {
+      pool = "local"
+      path = "/"
+      size = "30GB"
+    }
+  }
+
+  device {
+    name = "eth0"
+    type = "nic"
+    properties = {
+      network        = "lxdbr0"
+      "ipv4.address" = "10.146.220.55"
+    }
+  }
+
+  # Proxy NAT para acceder a Alfresco (puerto por defecto 8080) desde tu LAN
+  device {
+    name = "alfresco-http-proxy"
+    type = "proxy"
+    properties = {
+      listen  = "tcp:192.168.50.100:8090"
+      connect = "tcp:10.146.220.55:8080"
+      nat     = "true"
+    }
+  }
+
+  # Proxy NAT opcional para consola web de ActiveMQ (puerto por defecto 8161)
+  device {
+    name = "activemq-web-proxy"
+    type = "proxy"
+    properties = {
+      listen  = "tcp:192.168.50.100:8161"
+      connect = "tcp:10.146.220.55:8161"
+      nat     = "true"
+    }
+  }
+
+  lifecycle {
+    create_before_destroy = false
+  }
+
+  file {
+    source_path        = "${path.module}/modules/alfresco-stack.yaml"
+    target_path        = "/etc/alfresco-stack.yaml"
+    create_directories = true
+  }
+
+  config = {
+    "migration.stateful" = "false"
+    "user.user-data"     = templatefile("${path.module}/cloud-init-alfresco.yaml", {
+      db_host = "10.146.220.56"
+    })
+  }
+}
