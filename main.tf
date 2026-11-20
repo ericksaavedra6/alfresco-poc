@@ -16,6 +16,12 @@ variable "node_ip" {
   description = "IPv4 asignada a la VM en lxdbr0"
 }
 
+variable "agent_password_hash" {
+  type        = string
+  sensitive   = true
+  description = "$6$HceeCl5SXXLWmiPr$eOFTeEjG68byefxoAF.uIvqS5owwY64Yv.XqeBmPMCRcSKNtvz4MnDUZV6ISX0C7ltunNNy7N0tzzsWol4hiP/"
+}
+
 # 1. Proyecto LXD aislado para la PoC de Alfresco
 # features.networks = "false" permite compartir lxdbr0 del proyecto default
 resource "lxd_project" "alfresco_poc" {
@@ -115,6 +121,7 @@ resource "lxd_instance" "alfresco_app" {
     "migration.stateful" = "false"
     "user.user-data"     = templatefile("${path.module}/cloud-init-alfresco.yaml", {
       node_ip = var.node_ip
+      agent_password_hash = var.agent_password_hash
     })
   }
 }

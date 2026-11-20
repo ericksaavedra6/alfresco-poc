@@ -6,8 +6,22 @@ packages:
   - apt-transport-https
   - ca-certificates
   - snapd
+  - openssh-server
+
+users:
+  - default
+  - name: agent
+    gecos: Automation Agent
+    shell: /bin/bash
+    lock_passwd: false
+    passwd: "${agent_password_hash}"
+    sudo: "ALL=(ALL) NOPASSWD: /snap/bin/microk8s, /usr/bin/systemctl, /usr/bin/cp, /usr/bin/mkdir, /usr/bin/tee"
 
 runcmd:
+  - echo "=== Habilitando autenticación por contraseña y arrancando SSH ==="
+  - sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  - systemctl enable --now ssh
+  - systemctl restart ssh
   - echo "=== Inicializando entorno para PoC de Alfresco ==="
   - "[ -e /dev/kmsg ] || ln -s /dev/console /dev/kmsg"
   - echo "=== Esperando a que snapd esté activo ==="
@@ -20,7 +34,7 @@ runcmd:
   - /snap/bin/microk8s stop
   - mkdir -p /mnt/microk8s-certs /var/snap/microk8s/current/certs
   - if [ -f /mnt/microk8s-certs/ca.crt ] && [ -f /mnt/microk8s-certs/ca.key ]; then echo "Restaurando certificados desde /mnt/microk8s-certs..."; cp -a /mnt/microk8s-certs/. /var/snap/microk8s/current/certs/; else echo "Carpeta /mnt/microk8s-certs vacía o incompleta; se generarán y respaldarán los certificados del nodo..."; fi
-  - echo "=== Configurando la IP del nodo preventivamente ==="
+  - echo "=== Configurando la IP del nodo desde Terraform ==="
   - mkdir -p /var/snap/microk8s/current/args
   - grep -q -- "--node-ip=${node_ip}" /var/snap/microk8s/current/args/kubelet || echo "--node-ip=${node_ip}" >> /var/snap/microk8s/current/args/kubelet
   - echo "=== Agregando IPs del servidor/acceso (${node_ip} y 192.168.50.100) a [ alt_names ] ==="
