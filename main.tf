@@ -102,3 +102,7 @@ import {
   to = lxd_project.alfresco_poc
   id = "alfresco-poc"
 }
+import {
+  to = lxd_instance.alfresco_app
+  id = "alfresco-poc/alfresco-poc-app"
+}
