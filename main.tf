@@ -61,6 +61,10 @@ resource "lxd_instance" "alfresco_app" {
       nat     = "true"
     }
   }
+  
+  lifecycle {
+    create_before_destroy = false
+  }
 
   # Proxy NAT opcional para consola web de ActiveMQ (puerto por defecto 8161)
   device {
