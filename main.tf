@@ -73,10 +73,6 @@ resource "lxd_instance" "alfresco_app" {
     }
   }
 
-  lifecycle {
-    create_before_destroy = false
-  }
-
   file {
     source_path        = "${path.module}/modules/alfresco-stack.yaml"
     target_path        = "/etc/alfresco-stack.yaml"
@@ -86,7 +82,6 @@ resource "lxd_instance" "alfresco_app" {
   config = {
     "migration.stateful" = "false"
     "user.user-data"     = templatefile("${path.module}/cloud-init-alfresco.yaml", {
-      db_host = "10.146.220.56"
     })
   }
 }

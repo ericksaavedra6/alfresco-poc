@@ -50,11 +50,6 @@ write_files:
         /snap/bin/microk8s kubectl apply -f /etc/postgress-db.yaml || true
       fi
 
-      if [ -f /etc/alfresco-stack.yaml ]; then
-        echo "=== Aplicando stack de Alfresco (sin Solr/Elasticsearch) ==="
-        /snap/bin/microk8s kubectl apply -f /etc/alfresco-stack.yaml || true
-      fi
-
       echo "=== Aprovisionamiento de alfresco-poc-app finalizado ==="
 
 runcmd:
