@@ -15,13 +15,6 @@ provider "lxd" {}
 resource "lxd_project" "alfresco_poc" {
   name        = "alfresco-poc"
   description = "Proyecto aislado para PoC de Alfresco sin Solr"
-
-  config = {
-    "features.images"          = "false"
-    "features.profiles"        = "false"
-    "features.storage.volumes" = "false"
-    "features.networks"        = "false"
-  }
 }
 
 # 3. Instancia VM para Alfresco (Kubernetes / Repository / ActiveMQ)
@@ -33,7 +26,6 @@ resource "lxd_instance" "alfresco_app" {
   type     = "virtual-machine"
 
   # Asegura que la BD exista antes de levantar Alfresco
-  depends_on = [lxd_instance.alfresco_db]
 
   limits = {
     cpu    = "4"
