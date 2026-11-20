@@ -19,13 +19,13 @@ runcmd:
   - echo "=== Sincronizando certificados persistidos de MicroK8s ==="
   - /snap/bin/microk8s stop
   - mkdir -p /mnt/microk8s-certs /var/snap/microk8s/current/certs
-  - if [ -f /mnt/microk8s-certs/ca.crt ] && [ -f /mnt/microk8s-certs/ca.key ]; then echo "Restaurando certificados..."; cp -a /mnt/microk8s-certs/. /var/snap/microk8s/current/certs/; else echo "Respaldando certificados iniciales..."; cp -a /var/snap/microk8s/current/certs/. /mnt/microk8s-certs/; fi
+  - if [ -f /mnt/microk8s-certs/ca.crt ] && [ -f /mnt/microk8s-certs/ca.key ]; then echo "Restaurando certificados desde /mnt/microk8s-certs..."; cp -a /mnt/microk8s-certs/. /var/snap/microk8s/current/certs/; else echo "Carpeta /mnt/microk8s-certs vacía o incompleta; se generarán y respaldarán los certificados del nodo..."; fi
   - echo "=== Configurando la IP del nodo preventivamente ==="
-  - NODE_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
   - mkdir -p /var/snap/microk8s/current/args
-  - echo "--node-ip=$${NODE_IP}" >> /var/snap/microk8s/current/args/kubelet
-  - echo "=== Agregando 192.168.50.100 a [ alt_names ] para acceso remoto TLS ==="
-  - grep -q "192.168.50.100" /var/snap/microk8s/current/certs/csr.conf.template || sed -i '/^IP\.2 = 10\.152\.183\.1/a IP.3 = 192.168.50.100' /var/snap/microk8s/current/certs/csr.conf.template
+  - grep -q -- "--node-ip=${node_ip}" /var/snap/microk8s/current/args/kubelet || echo "--node-ip=${node_ip}" >> /var/snap/microk8s/current/args/kubelet
+  - echo "=== Agregando IPs del servidor/acceso (${node_ip} y 192.168.50.100) a [ alt_names ] ==="
+  - grep -q "${node_ip}" /var/snap/microk8s/current/certs/csr.conf.template || sed -i "/^IP\.2 = 10\.152\.183\.1/a IP.3 = ${node_ip}" /var/snap/microk8s/current/certs/csr.conf.template
+  - grep -q "192.168.50.100" /var/snap/microk8s/current/certs/csr.conf.template || sed -i "/^IP\.3 = ${node_ip}/a IP.4 = 192.168.50.100" /var/snap/microk8s/current/certs/csr.conf.template
   - echo "=== Forzando plataforma por defecto en containerd ==="
   - sed -i 's/platforms = \[\]/platforms = \["linux\/amd64"\]/g' /var/snap/microk8s/current/args/containerd-template.toml 2>/dev/null || true
   - echo "=== Arrancando MicroK8s y refrescando certificado del servidor ==="
@@ -33,7 +33,7 @@ runcmd:
   - /snap/bin/microk8s status --wait-ready
   - /snap/bin/microk8s refresh-certs --cert server.crt
   - /snap/bin/microk8s status --wait-ready
-  - cp -a /var/snap/microk8s/current/certs/. /mnt/microk8s-certs/
+  - if [ ! -f /mnt/microk8s-certs/ca.crt ] || [ ! -f /mnt/microk8s-certs/ca.key ] || [ ! -f /mnt/microk8s-certs/server.crt ]; then echo "Respaldando certificados generados en /mnt/microk8s-certs..."; cp -a /var/snap/microk8s/current/certs/. /mnt/microk8s-certs/; else echo "Actualizando respaldo de certificados en /mnt/microk8s-certs..."; cp -a /var/snap/microk8s/current/certs/. /mnt/microk8s-certs/; fi
   - echo "=== Configurando alias global para kubectl ==="
   - echo "alias kubectl='microk8s kubectl'" >> /root/.bashrc
   - echo "Aprovisionamiento integral finalizado."

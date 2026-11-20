@@ -10,22 +10,30 @@ terraform {
 
 provider "lxd" {}
 
+variable "node_ip" {
+  type        = string
+  default     = "10.146.220.55"
+  description = "IPv4 asignada a la VM en lxdbr0"
+}
+
 # 1. Proyecto LXD aislado para la PoC de Alfresco
 # features.networks = "false" permite compartir lxdbr0 del proyecto default
 resource "lxd_project" "alfresco_poc" {
   name        = "alfresco-poc"
   description = "Proyecto aislado para PoC de Alfresco sin Solr"
+
+  config = {
+    "features.networks" = "false"
+  }
 }
 
-# 3. Instancia VM para Alfresco (Kubernetes / Repository / ActiveMQ)
+# 2. Instancia VM para Alfresco (Kubernetes / Repository / ActiveMQ)
 resource "lxd_instance" "alfresco_app" {
   name     = "alfresco-poc-app"
   project  = lxd_project.alfresco_poc.name
   image    = "ubuntu:24.04"
   profiles = ["default"]
   type     = "virtual-machine"
-
-  # Asegura que la BD exista antes de levantar Alfresco
 
   limits = {
     cpu    = "4"
@@ -56,7 +64,7 @@ resource "lxd_instance" "alfresco_app" {
     type = "nic"
     properties = {
       network        = "lxdbr0"
-      "ipv4.address" = "10.146.220.55"
+      "ipv4.address" = var.node_ip
     }
   }
 
@@ -66,13 +74,9 @@ resource "lxd_instance" "alfresco_app" {
     type = "proxy"
     properties = {
       listen  = "tcp:192.168.50.100:8090"
-      connect = "tcp:10.146.220.55:8080"
+      connect = "tcp:${var.node_ip}:8080"
       nat     = "true"
     }
-  }
-
-  lifecycle {
-    create_before_destroy = false
   }
 
   # Proxy NAT opcional para consola web de ActiveMQ (puerto por defecto 8161)
@@ -81,19 +85,25 @@ resource "lxd_instance" "alfresco_app" {
     type = "proxy"
     properties = {
       listen  = "tcp:192.168.50.100:8161"
-      connect = "tcp:10.146.220.55:8161"
+      connect = "tcp:${var.node_ip}:8161"
       nat     = "true"
     }
   }
+
+  # Proxy NAT para exponer el API server de MicroK8s (puerto 16443) hacia tu LAN/Mac
   device {
-  name = "k8s-api-proxy"
-  type = "proxy"
-  properties = {
-    listen  = "tcp:192.168.50.100:16443"
-    connect = "tcp:10.146.220.55:16443"
-    nat     = "true"
+    name = "k8s-api-proxy"
+    type = "proxy"
+    properties = {
+      listen  = "tcp:192.168.50.100:16443"
+      connect = "tcp:${var.node_ip}:16443"
+      nat     = "true"
+    }
   }
-}
+
+  lifecycle {
+    create_before_destroy = false
+  }
 
   file {
     source_path        = "${path.module}/modules/alfresco-stack.yaml"
@@ -104,14 +114,7 @@ resource "lxd_instance" "alfresco_app" {
   config = {
     "migration.stateful" = "false"
     "user.user-data"     = templatefile("${path.module}/cloud-init-alfresco.yaml", {
+      node_ip = var.node_ip
     })
   }
-}
-import {
-  to = lxd_project.alfresco_poc
-  id = "alfresco-poc"
-}
-import {
-  to = lxd_instance.alfresco_app
-  id = "alfresco-poc/alfresco-poc-app"
 }
