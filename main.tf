@@ -22,6 +22,12 @@ variable "agent_password_hash" {
   description = "$6$HceeCl5SXXLWmiPr$eOFTeEjG68byefxoAF.uIvqS5owwY64Yv.XqeBmPMCRcSKNtvz4MnDUZV6ISX0C7ltunNNy7N0tzzsWol4hiP/"
 }
 
+variable "ssh_proxy_port" {
+    type        = string
+    default     = "2222"
+    description = "Puerto expuesto en 192.168.50.100 para redirigir SSH hacia la VM"
+  }
+
 # 1. Proyecto LXD aislado para la PoC de Alfresco
 # features.networks = "false" permite compartir lxdbr0 del proyecto default
 resource "lxd_project" "alfresco_poc" {
@@ -103,6 +109,16 @@ resource "lxd_instance" "alfresco_app" {
     properties = {
       listen  = "tcp:192.168.50.100:16443"
       connect = "tcp:${var.node_ip}:16443"
+      nat     = "true"
+    }
+  }
+  # Proxy NAT para acceso SSH al agente desde la IP del servidor (192.168.50.100)
+  device {
+    name = "ssh-agent-proxy"
+    type = "proxy"
+    properties = {
+      listen  = "tcp:192.168.50.100:${var.ssh_proxy_port}"
+      connect = "tcp:${var.node_ip}:22"
       nat     = "true"
     }
   }
