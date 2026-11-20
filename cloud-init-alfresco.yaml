@@ -8,7 +8,7 @@ packages:
   - snapd
 
 runcmd:
-  - echo "=== Inicializando entorno multimedia autónomo ==="
+  - echo "=== Inicializando entorno para PoC de Alfresco ==="
   - "[ -e /dev/kmsg ] || ln -s /dev/console /dev/kmsg"
   - echo "=== Esperando a que snapd esté activo ==="
   - snap wait system seed
@@ -16,17 +16,17 @@ runcmd:
   - snap install microk8s --classic
   - echo "=== Esperando a que MicroK8s esté listo por primera vez ==="
   - /snap/bin/microk8s status --wait-ready
+  - echo "=== Sincronizando certificados persistidos de MicroK8s ==="
+  - /snap/bin/microk8s stop
+  - mkdir -p /mnt/microk8s-certs /var/snap/microk8s/current/certs
+  - if [ -f /mnt/microk8s-certs/ca.crt ] && [ -f /mnt/microk8s-certs/ca.key ]; then echo "Restaurando certificados..."; cp -a /mnt/microk8s-certs/. /var/snap/microk8s/current/certs/; else echo "Respaldando certificados iniciales..."; cp -a /var/snap/microk8s/current/certs/. /mnt/microk8s-certs/; fi
   - echo "=== Configurando la IP del nodo preventivamente ==="
   - NODE_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
   - mkdir -p /var/snap/microk8s/current/args
-  - echo "--node-ip=$NODE_IP" >> /var/snap/microk8s/current/args/kubelet
-  - echo "=== Sincronizando Kubelet y Red ==="
-  - /snap/bin/microk8s stop
-  - /snap/bin/microk8s start
-  - /snap/bin/microk8s status --wait-ready
+  - echo "--node-ip=$${NODE_IP}" >> /var/snap/microk8s/current/args/kubelet
   - echo "=== Forzando plataforma por defecto en containerd ==="
   - sed -i 's/platforms = \[\]/platforms = \["linux\/amd64"\]/g' /var/snap/microk8s/current/args/containerd-template.toml 2>/dev/null || true
-  - /snap/bin/microk8s stop
+  - echo "=== Sincronizando Kubelet y Red ==="
   - /snap/bin/microk8s start
   - /snap/bin/microk8s status --wait-ready
   - echo "=== Configurando alias global para kubectl ==="

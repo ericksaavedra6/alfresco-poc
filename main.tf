@@ -43,6 +43,15 @@ resource "lxd_instance" "alfresco_app" {
   }
 
   device {
+    name = "microk8s-certs-dir"
+    type = "disk"
+    properties = {
+      source = "/var/lib/alfresco-poc/microk8s-certs"
+      path   = "/mnt/microk8s-certs"
+    }
+  }
+
+  device {
     name = "eth0"
     type = "nic"
     properties = {
@@ -88,4 +97,8 @@ resource "lxd_instance" "alfresco_app" {
     "user.user-data"     = templatefile("${path.module}/cloud-init-alfresco.yaml", {
     })
   }
+}
+import {
+  to = lxd_project.alfresco_poc
+  id = "alfresco-poc"
 }
