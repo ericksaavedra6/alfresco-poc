@@ -19,7 +19,8 @@ variable "node_ip" {
 variable "agent_password_hash" {
   type        = string
   sensitive   = true
-  description = "$6$HceeCl5SXXLWmiPr$eOFTeEjG68byefxoAF.uIvqS5owwY64Yv.XqeBmPMCRcSKNtvz4MnDUZV6ISX0C7ltunNNy7N0tzzsWol4hiP/"
+  default = "$6$HceeCl5SXXLWmiPr$eOFTeEjG68byefxoAF.uIvqS5owwY64Yv.XqeBmPMCRcSKNtvz4MnDUZV6ISX0C7ltunNNy7N0tzzsWol4hiP/"
+  description = "Valor hash de la contraseña para el ambiente poc"
 }
 
 variable "ssh_proxy_port" {
