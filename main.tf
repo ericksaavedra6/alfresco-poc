@@ -85,6 +85,15 @@ resource "lxd_instance" "alfresco_app" {
       nat     = "true"
     }
   }
+  device {
+  name = "k8s-api-proxy"
+  type = "proxy"
+  properties = {
+    listen  = "tcp:192.168.50.100:16443"
+    connect = "tcp:10.146.220.55:16443"
+    nat     = "true"
+  }
+}
 
   file {
     source_path        = "${path.module}/modules/alfresco-stack.yaml"
