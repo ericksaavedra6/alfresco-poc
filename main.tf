@@ -24,54 +24,6 @@ resource "lxd_project" "alfresco_poc" {
   }
 }
 
-# 2. Instancia VM para PostgreSQL (Base de datos dedicada)
-resource "lxd_instance" "alfresco_db" {
-  name     = "alfresco-poc-db"
-  project  = lxd_project.alfresco_poc.name
-  image    = "ubuntu:24.04"
-  profiles = ["default"]
-  type     = "virtual-machine"
-
-  limits = {
-    cpu    = "2"
-    memory = "2GB"
-  }
-
-  device {
-    name = "root"
-    type = "disk"
-    properties = {
-      pool = "local"
-      path = "/"
-      size = "20GB"
-    }
-  }
-
-  device {
-    name = "eth0"
-    type = "nic"
-    properties = {
-      network        = "lxdbr0"
-      "ipv4.address" = "10.146.220.56"
-    }
-  }
-
-  lifecycle {
-    create_before_destroy = false
-  }
-
-  file {
-    source_path        = "${path.module}/modules/postgress-db.yaml"
-    target_path        = "/etc/postgress-db.yaml"
-    create_directories = true
-  }
-
-  config = {
-    "migration.stateful" = "false"
-    "user.user-data"     = templatefile("${path.module}/cloud-init-db.yaml", {})
-  }
-}
-
 # 3. Instancia VM para Alfresco (Kubernetes / Repository / ActiveMQ)
 resource "lxd_instance" "alfresco_app" {
   name     = "alfresco-poc-app"
@@ -145,4 +97,8 @@ resource "lxd_instance" "alfresco_app" {
       db_host = "10.146.220.56"
     })
   }
+}
+import {
+  to = lxd_project.alfresco_poc
+  id = "alfresco-poc"
 }
