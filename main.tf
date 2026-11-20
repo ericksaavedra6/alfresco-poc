@@ -61,7 +61,7 @@ resource "lxd_instance" "alfresco_app" {
       nat     = "true"
     }
   }
-  
+
   lifecycle {
     create_before_destroy = false
   }
@@ -88,8 +88,4 @@ resource "lxd_instance" "alfresco_app" {
     "user.user-data"     = templatefile("${path.module}/cloud-init-alfresco.yaml", {
     })
   }
-}
-import {
-  to = lxd_project.alfresco_poc
-  id = "alfresco-poc"
 }
