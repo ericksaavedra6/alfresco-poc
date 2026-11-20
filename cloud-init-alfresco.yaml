@@ -18,8 +18,9 @@ users:
     sudo: "ALL=(ALL) NOPASSWD: /snap/bin/microk8s, /usr/bin/systemctl, /usr/bin/cp, /usr/bin/mkdir, /usr/bin/tee"
 
 runcmd:
-  - echo "=== Habilitando autenticación por contraseña y arrancando SSH ==="
+  - echo "=== Configurando SSH con autenticación por contraseña ==="
   - sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  - sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || true
   - systemctl enable --now ssh
   - systemctl restart ssh
   - echo "=== Inicializando entorno para PoC de Alfresco ==="
