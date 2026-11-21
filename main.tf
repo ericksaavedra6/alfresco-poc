@@ -50,7 +50,7 @@ resource "lxd_instance" "alfresco_app" {
 
   limits = {
     cpu    = "4"
-    memory = "6GB"
+    memory = "10GB"
   }
 
   device {
@@ -59,7 +59,7 @@ resource "lxd_instance" "alfresco_app" {
     properties = {
       pool = "local"
       path = "/"
-      size = "30GB"
+      size = "150GB"
     }
   }
 
