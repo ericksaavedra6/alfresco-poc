@@ -1,27 +1,72 @@
-name: Deploy Multimedia Infrastructure
+name: Validate and provision Alfresco POC infrastructure
 
 on:
   push:
-    branches:
-      - main # O la rama principal que uses en tu repositorio
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  terraform:
-    name: "Terraform Apply"
-    runs-on: self-hosted # Utilizará tu segundo runner en el servidor ec200a
-
+  validate:
+    name: Validate configuration
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cloud-init python3-yaml shellcheck
+      - name: Validate Terraform and bootstrap
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+          shellcheck scripts/*.sh
+          python3 -m unittest discover -s tests -v
+          python3 scripts/render-cloud-init.py .validation/cloud-init.yaml
+          cloud-init schema --config-file .validation/cloud-init.yaml
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Validate
-        run: terraform validate
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
+  terraform:
+    name: Apply and verify on MicroCloud
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: self-hosted
+    timeout-minutes: 50
+    concurrency:
+      group: alfresco-poc-infrastructure
+      cancel-in-progress: false
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - name: Initialize persistent Terraform state
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_dir="$HOME/.local/state/alfresco-poc"
+          install -d -m 0700 "$state_dir"
+          terraform init -input=false -backend-config="path=$state_dir/terraform.tfstate"
+          terraform validate
+      - name: Plan, protect existing resources, and apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          plan_file=$(mktemp "$RUNNER_TEMP/alfresco-poc-plan.XXXXXX")
+          trap 'rm -f "$plan_file"' EXIT
+          terraform plan -input=false -lock-timeout=5m -out="$plan_file"
+          terraform show -json "$plan_file" | python3 scripts/check-plan.py
+          terraform apply -input=false -auto-approve "$plan_file"
+      - name: Complete cloud-init and verify build and cluster networking
+        run: bash scripts/reconcile-instance.sh
