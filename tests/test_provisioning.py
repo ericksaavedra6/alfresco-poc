@@ -13,6 +13,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('check_plan', ROOT / 'scripts/check-plan.py')
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
+capture_spec = importlib.util.spec_from_file_location('capture_resources', ROOT / 'scripts/capture-resources.py')
+capture = importlib.util.module_from_spec(capture_spec)
+capture_spec.loader.exec_module(capture)
 
 
 class ResourceProtectionTests(unittest.TestCase):
@@ -63,6 +66,39 @@ class ResourceProtectionTests(unittest.TestCase):
     def test_device_order_is_irrelevant(self):
         self.change['after']['device'].reverse()
         self.assertEqual(guard.validate(self.plan), [])
+
+    def test_imported_device_state_requires_live_hardware_baseline(self):
+        self.change['before']['device'] = []
+        self.change['after']['device'] = []
+        self.assertTrue(guard.validate(self.plan))
+        baseline = {'name': 'alfresco-poc-app', 'limits': self.instance['limits'], 'disks': self.instance['device']}
+        self.assertEqual(guard.validate(self.plan, baseline), [])
+
+    def test_imported_state_cannot_hide_live_disk_resize(self):
+        self.change['before']['device'] = []
+        self.change['after']['device'] = []
+        disks = copy.deepcopy(self.instance['device'])
+        disks[0]['properties']['size'] = '200GB'
+        baseline = {'name': 'alfresco-poc-app', 'limits': self.instance['limits'], 'disks': disks}
+        self.assertTrue(guard.validate(self.plan, baseline))
+
+    def test_unknown_devices_are_rejected_even_with_live_baseline(self):
+        self.change['before']['device'] = []
+        self.change['after']['device'] = []
+        self.change['after_unknown'] = {'device': True}
+        baseline = {'name': 'alfresco-poc-app', 'limits': self.instance['limits'], 'disks': self.instance['device']}
+        self.assertTrue(guard.validate(self.plan, baseline))
+
+    def test_snapshot_omits_user_data_and_credentials(self):
+        response = {'metadata': {
+            'name': 'alfresco-poc-app',
+            'expanded_config': {'limits.cpu': '4', 'limits.memory': '10GB', 'user.user-data': 'credential-containing-cloud-init'},
+            'expanded_devices': {'root': {'type': 'disk', 'size': '150GB', 'path': '/', 'pool': 'local'}, 'eth0': {'type': 'nic'}},
+        }}
+        snapshot = capture.snapshot(response)
+        self.assertEqual(snapshot['limits'], {'cpu': '4', 'memory': '10GB'})
+        self.assertEqual(len(snapshot['disks']), 1)
+        self.assertNotIn('credential', json.dumps(snapshot))
 
 
 class NodeConfigurationTests(unittest.TestCase):

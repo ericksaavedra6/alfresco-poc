@@ -63,10 +63,20 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          baseline=$(mktemp "$RUNNER_TEMP/alfresco-poc-resources.XXXXXX")
+          lxc query '/1.0/instances/alfresco-poc-app?project=alfresco-poc' | python3 scripts/capture-resources.py > "$baseline"
+          echo "RESOURCE_BASELINE=$baseline" >> "$GITHUB_ENV"
           plan_file=$(mktemp "$RUNNER_TEMP/alfresco-poc-plan.XXXXXX")
           trap 'rm -f "$plan_file"' EXIT
           terraform plan -input=false -lock-timeout=5m -out="$plan_file"
-          terraform show -json "$plan_file" | python3 scripts/check-plan.py
+          terraform show -json "$plan_file" | python3 scripts/check-plan.py --resources "$baseline"
           terraform apply -input=false -auto-approve "$plan_file"
+          lxc query '/1.0/instances/alfresco-poc-app?project=alfresco-poc' | python3 scripts/capture-resources.py --compare "$baseline"
       - name: Complete cloud-init and verify build and cluster networking
-        run: bash scripts/reconcile-instance.sh
+        run: |
+          bash scripts/reconcile-instance.sh
+          lxc query '/1.0/instances/alfresco-poc-app?project=alfresco-poc' | python3 scripts/capture-resources.py --compare "$RESOURCE_BASELINE"
+      - name: Remove temporary resource snapshot
+        if: always()
+        run: |
+          if [[ -n ${RESOURCE_BASELINE:-} ]]; then rm -f -- "$RESOURCE_BASELINE"; fi

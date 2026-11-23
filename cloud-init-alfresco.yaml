@@ -1,6 +1,8 @@
 #cloud-config
 package_update: true
 package_upgrade: false
+ssh_deletekeys: false
+ssh_pwauth: true
 packages:
   - ca-certificates
   - curl

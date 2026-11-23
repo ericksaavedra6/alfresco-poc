@@ -30,6 +30,12 @@ proyecto `alfresco-poc`. El workflow guarda el estado local en
 `$HOME/.local/state/alfresco-poc/terraform.tfstate`, fuera del checkout descartable.
 Los bloques `import` mantienen la adopción de los recursos existentes.
 
+Al importar, el proveedor no reconstruye los atributos de imagen y dispositivos.
+Esos atributos se conservan con `ignore_changes` y `prevent_destroy` protege la VM.
+El runner consulta directamente LXD para comprobar la capacidad y todos los discos
+antes y después de aplicar, y de nuevo al finalizar el bootstrap. La captura excluye
+cloud-init y credenciales. Los cambios de configuración conservan las claves SSH existentes.
+
 Antes de aplicar, `scripts/check-plan.py` rechaza eliminaciones, reemplazos y cambios de CPU,
 memoria o dispositivos de disco. Aplica exactamente el plan que pasó esa comprobación.
 
