@@ -160,8 +160,10 @@ chmod 0600 /home/agent/.kube/config
 
 # Export access on the existing host mount; never upload kubeconfigs as artifacts.
 install -d -m 0700 /mnt/microk8s-certs
-"$mk8s" config | sed "s@https://127.0.0.1:16443@https://$API_ADDRESS:16443@" > /mnt/microk8s-certs/alfresco-poc.kubeconfig
+"$mk8s" config > /mnt/microk8s-certs/alfresco-poc.kubeconfig
 chmod 0600 /mnt/microk8s-certs/alfresco-poc.kubeconfig
+cluster=$("$mk8s" kubectl --kubeconfig=/mnt/microk8s-certs/alfresco-poc.kubeconfig config view -o 'jsonpath={.clusters[0].name}')
+"$mk8s" kubectl --kubeconfig=/mnt/microk8s-certs/alfresco-poc.kubeconfig config set-cluster "$cluster" --server="https://$API_ADDRESS:16443"
 "$mk8s" kubectl --kubeconfig=/mnt/microk8s-certs/alfresco-poc.kubeconfig config rename-context microk8s alfresco-poc
 
 runuser -l agent -c '/usr/local/bin/alfresco-poc-verify'
