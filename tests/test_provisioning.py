@@ -4,6 +4,7 @@ import importlib.util
 import pathlib
 import re
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -102,6 +103,31 @@ class ResourceProtectionTests(unittest.TestCase):
 
 
 class NodeConfigurationTests(unittest.TestCase):
+    def test_cni_credentials_are_renewed_before_waiting_for_cluster_readiness(self):
+        script = (ROOT / 'scripts/bootstrap-instance.sh').read_text()
+        start = script.index('timeout 180 "$mk8s" refresh-certs --cert server.crt')
+        end = script.index("echo 'Preparing DNS, persistent storage and local image registry'")
+        block = script[start:end]
+        mock = '''set -euo pipefail
+mk8s=fake_microk8s
+repaired_credentials=true
+renewed=false
+timeout() { shift; "$@"; }
+fake_microk8s() {
+  case "$*" in
+    'kubectl -n kube-system rollout restart '*) renewed=true ;;
+    'status --wait-ready') "$renewed" || return 60 ;;
+    'kubectl -n kube-system rollout status '*) "$renewed" || return 61 ;;
+  esac
+  return 0
+}
+'''
+        git_bash = pathlib.Path('C:/Program Files/Git/bin/bash.exe')
+        bash = str(git_bash) if sys.platform == 'win32' and git_bash.exists() else shutil.which('bash')
+        self.assertIsNotNone(bash)
+        result = subprocess.run([bash, '-c', mock + block + '\n"$renewed"\n'], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_repeated_configuration_preserves_existing_sans(self):
         script = (ROOT / 'scripts/bootstrap-instance.sh').read_text()
         match = re.search(r'python3 - "\$data" "\$NODE_IP" "\$API_ADDRESS" <<\'PY\'\n(.*?)\nPY', script, re.S)
