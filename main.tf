@@ -136,6 +136,10 @@ resource "lxd_instance" "alfresco_app" {
 
   lifecycle {
     create_before_destroy = false
+    prevent_destroy       = true
+    # The provider cannot reconstruct image/device configuration during import.
+    # Keep the existing VM identity and hardware; this POC only updates user-data.
+    ignore_changes = [image, device]
   }
 
   file {
