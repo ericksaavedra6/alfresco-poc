@@ -103,6 +103,31 @@ class ResourceProtectionTests(unittest.TestCase):
 
 
 class NodeConfigurationTests(unittest.TestCase):
+    def registry_wait_result(self, mock):
+        script = (ROOT / 'scripts/verify-instance.sh').read_text()
+        start = script.index('registry_deadline=')
+        end = script.index('# A stored Ready condition')
+        git_bash = pathlib.Path('C:/Program Files/Git/bin/bash.exe')
+        bash = str(git_bash) if sys.platform == 'win32' and git_bash.exists() else shutil.which('bash')
+        self.assertIsNotNone(bash)
+        return subprocess.run([bash, '-c', 'set -euo pipefail\n' + mock + script[start:end]], text=True, capture_output=True)
+
+    def test_registry_recovers_from_transient_connection_failure(self):
+        mock = '''attempts=0
+curl() { attempts=$((attempts + 1)); if (( attempts >= 2 )); then return 0; fi; return 28; }
+sleep() { :; }
+'''
+        result = self.registry_wait_result(mock)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_registry_failure_remains_bounded(self):
+        mock = '''curl() { return 28; }
+sleep() { SECONDS=$((SECONDS + 121)); }
+'''
+        result = self.registry_wait_result(mock)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Local registry did not become reachable', result.stderr)
+
     def test_cni_credentials_are_renewed_before_waiting_for_cluster_readiness(self):
         script = (ROOT / 'scripts/bootstrap-instance.sh').read_text()
         start = script.index('timeout 180 "$mk8s" refresh-certs --cert server.crt')

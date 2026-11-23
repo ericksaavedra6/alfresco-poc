@@ -16,7 +16,13 @@ docker buildx version
 "${kube[@]}" -n kube-system rollout status daemonset/calico-node --timeout=60s
 "${kube[@]}" -n kube-system rollout status deployment/coredns --timeout=60s
 "${kube[@]}" -n container-registry rollout status deployment/registry --timeout=60s
-curl --fail --silent --show-error --max-time 10 http://localhost:32000/v2/ >/dev/null
+# Pod readiness may still be cached while kube-proxy restores routes after boot.
+# Require a real registry response, allowing a bounded network convergence period.
+registry_deadline=$((SECONDS + 120))
+until curl --fail --silent --show-error --connect-timeout 2 --max-time 5 http://localhost:32000/v2/ >/dev/null; do
+  (( SECONDS < registry_deadline )) || { echo 'Local registry did not become reachable' >&2; exit 1; }
+  sleep 2
+done
 # A stored Ready condition can be stale if the kubelet lost its API connection.
 "${kube[@]}" get leases -n kube-node-lease -o json | python3 -c '
 import datetime, json, sys

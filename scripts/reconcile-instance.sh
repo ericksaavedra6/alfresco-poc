@@ -28,7 +28,10 @@ until lxc --project "$project" exec "$instance" -- true; do
   (( SECONDS < deadline )) || { echo 'LXD guest agent did not return after restart' >&2; exit 1; }
   sleep 5
 done
-timeout 1500 lxc --project "$project" exec "$instance" -- timeout 1440 cloud-init status --wait
+if ! timeout 1500 lxc --project "$project" exec "$instance" -- timeout 1440 cloud-init status --wait; then
+  lxc --project "$project" exec "$instance" -- tail -n 80 /var/log/alfresco-poc-bootstrap.log || true
+  exit 1
+fi
 actual=$(lxc --project "$project" exec "$instance" -- cat /var/lib/alfresco-poc/bootstrap-revision)
 [[ "$actual" == "$expected" ]] || { echo 'The expected bootstrap did not complete' >&2; exit 1; }
 lxc --project "$project" exec "$instance" -- runuser -l agent -c '/usr/local/bin/alfresco-poc-verify --smoke'
