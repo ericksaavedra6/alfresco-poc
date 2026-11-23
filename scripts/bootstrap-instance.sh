@@ -121,9 +121,13 @@ fi
 
 timeout 180 "$mk8s" refresh-certs --cert server.crt
 timeout 120 "$mk8s" start
-timeout 600 "$mk8s" status --wait-ready
-"$mk8s" kubectl --request-timeout=15s get --raw=/readyz
-"$mk8s" kubectl wait --for=condition=Ready nodes --all --timeout=180s
+# API readiness must precede credential renewal on the CNI pods. Waiting for
+# all of MicroK8s first can deadlock on pods still mounting the previous CA.
+deadline=$((SECONDS + 180))
+until "$mk8s" kubectl --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; do
+  (( SECONDS < deadline )) || { echo 'Kubernetes API did not become ready' >&2; exit 1; }
+  sleep 5
+done
 if "$repaired_credentials"; then
   # Refresh projected credentials on the infrastructure pods after repairing the
   # old bootstrap's inconsistent CA/client configuration.
@@ -131,6 +135,8 @@ if "$repaired_credentials"; then
 fi
 "$mk8s" kubectl -n kube-system rollout status daemonset/calico-node --timeout=300s
 "$mk8s" kubectl -n kube-system rollout status deployment/calico-kube-controllers --timeout=300s
+timeout 600 "$mk8s" status --wait-ready
+"$mk8s" kubectl wait --for=condition=Ready nodes --all --timeout=180s
 
 echo 'Preparing DNS, persistent storage and local image registry'
 timeout 600 "$mk8s" enable dns hostpath-storage registry
