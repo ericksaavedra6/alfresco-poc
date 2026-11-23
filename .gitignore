@@ -1,0 +1,11 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.auto.tfvars
+*.auto.tfvars.json
+*.kubeconfig
+__pycache__/
+.tools/
+.validation/
+desktop.ini

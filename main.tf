@@ -1,5 +1,6 @@
 terraform {
-  required_version = ">= 1.3.0"
+  required_version = ">= 1.5.0"
+  backend "local" {}
   required_providers {
     lxd = {
       source  = "terraform-lxd/lxd"
@@ -10,6 +11,15 @@ terraform {
 
 provider "lxd" {}
 
+locals {
+  bootstrap_revision = sha256(join("\n", [
+    file("${path.module}/cloud-init-alfresco.yaml"),
+    file("${path.module}/scripts/bootstrap-instance.sh"),
+    file("${path.module}/scripts/verify-instance.sh"),
+    var.node_ip,
+  ]))
+}
+
 variable "node_ip" {
   type        = string
   default     = "10.146.220.55"
@@ -19,21 +29,21 @@ variable "node_ip" {
 variable "agent_password_hash" {
   type        = string
   sensitive   = true
-  default = "$6$HceeCl5SXXLWmiPr$eOFTeEjG68byefxoAF.uIvqS5owwY64Yv.XqeBmPMCRcSKNtvz4MnDUZV6ISX0C7ltunNNy7N0tzzsWol4hiP/"
+  default     = "$6$HceeCl5SXXLWmiPr$eOFTeEjG68byefxoAF.uIvqS5owwY64Yv.XqeBmPMCRcSKNtvz4MnDUZV6ISX0C7ltunNNy7N0tzzsWol4hiP/"
   description = "Valor hash de la contraseña para el ambiente poc"
 }
 
 variable "ssh_proxy_port" {
-    type        = string
-    default     = "2222"
-    description = "Puerto expuesto en 192.168.50.100 para redirigir SSH hacia la VM"
-  }
+  type        = string
+  default     = "2222"
+  description = "Puerto expuesto en 192.168.50.100 para redirigir SSH hacia la VM"
+}
 
 # 1. Proyecto LXD aislado para la PoC de Alfresco
 # features.networks = "false" permite compartir lxdbr0 del proyecto default
 resource "lxd_project" "alfresco_poc" {
   name        = "alfresco-poc"
-  description = "Proyecto aislado para PoC de Alfresco sin Solr"
+  description = "Proyecto aislado para PoC de Alfresco 6.2"
 
   config = {
     "features.networks" = "false"
@@ -136,9 +146,12 @@ resource "lxd_instance" "alfresco_app" {
 
   config = {
     "migration.stateful" = "false"
-    "user.user-data"     = templatefile("${path.module}/cloud-init-alfresco.yaml", {
-      node_ip = var.node_ip
-      agent_password_hash = var.agent_password_hash
+    "user.user-data" = templatefile("${path.module}/cloud-init-alfresco.yaml", {
+      node_ip                 = var.node_ip
+      agent_password_hash     = var.agent_password_hash
+      bootstrap_revision      = local.bootstrap_revision
+      bootstrap_script_base64 = base64encode(file("${path.module}/scripts/bootstrap-instance.sh"))
+      verify_script_base64    = base64encode(file("${path.module}/scripts/verify-instance.sh"))
     })
   }
 }
@@ -150,4 +163,9 @@ import {
 import {
   to = lxd_instance.alfresco_app
   id = "alfresco-poc/alfresco-poc-app"
+}
+
+output "bootstrap_revision" {
+  value       = local.bootstrap_revision
+  description = "Revision expected by the provisioning verification workflow"
 }
